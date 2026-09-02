@@ -1,0 +1,44 @@
+[
+  {
+    "file": "add_index.sql",
+    "exit": 0,
+    "max_row_loss": 0,
+    "fail_under": 60
+  },
+  {
+    "file": "add_nullable.sql",
+    "exit": 0,
+    "max_row_loss": 0,
+    "fail_under": 60
+  },
+  {
+    "file": "delete_where.sql",
+    "exit": 1,
+    "max_row_loss": 0,
+    "fail_under": 60
+  },
+  {
+    "file": "add_not_null.sql",
+    "exit": 1,
+    "max_row_loss": null,
+    "fail_under": 60
+  },
+  {
+    "file": "drop_table.sql",
+    "exit": 1,
+    "max_row_loss": 0,
+    "fail_under": 60
+  },
+  {
+    "file": "create_table.sql",
+    "exit": 0,
+    "max_row_loss": 0,
+    "fail_under": 60
+  },
+  {
+    "file": "rename_column.sql",
+    "exit": 0,
+    "max_row_loss": 0,
+    "fail_under": 60
+  }
+]

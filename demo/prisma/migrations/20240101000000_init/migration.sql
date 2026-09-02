@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY,
+  email TEXT,
+  name TEXT
+);
+CREATE TABLE IF NOT EXISTS orders (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER,
+  total_cents INTEGER
+);

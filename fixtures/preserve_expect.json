@@ -1,0 +1,19 @@
+{
+  "table": "Profile",
+  "key": "userId",
+  "from_col": "biograpy",
+  "to_col": "biography",
+  "golden": "ada3a5a640c73bf005c35349d34e572aa13a4edb28167d8fe73d875bbd60c9aa",
+  "cases": [
+    {
+      "file": "real/prisma/migrations/20240320000000_rename_biography/migration.sql",
+      "exit": 1,
+      "verdicts": ["APPLY_FAILED", "PARTIAL", "DESTROYED"]
+    },
+    {
+      "file": "real/prisma/migrations/20240320000000_rename_biography_fixed/migration.sql",
+      "exit": 0,
+      "verdicts": ["PRESERVED"]
+    }
+  ]
+}
