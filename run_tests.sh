@@ -10,4 +10,5 @@ python tests/test_blast.py
 python tests/test_check.py
 python tests/test_query.py
 python tests/test_drift.py
+python tests/test_pack.py
 echo ALL_PASS

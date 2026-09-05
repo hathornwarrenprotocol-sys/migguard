@@ -2,3 +2,4 @@ ai-liquid-plant/
 __pycache__/
 *.pyc
 .venv/
+migguard.receipt.json

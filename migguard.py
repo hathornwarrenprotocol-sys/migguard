@@ -383,6 +383,40 @@ def drift_report(a: Path, b: Path) -> tuple[str, int]:
     print("ALL_PASS")
     return "ALL_PASS", 0
 
+
+def write_receipt(path: Path, payload: dict) -> None:
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def integrity_on(path: Path, sql: str | None = None) -> tuple[str, list[str], int]:
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    dest = Path(tmp.name)
+    shutil.copy2(path, dest)
+    notes = []
+    try:
+        conn = sqlite3.connect(dest)
+        try:
+            if sql:
+                conn.execute("BEGIN")
+                for stmt in [s.strip() for s in sql.split(";") if s.strip()]:
+                    conn.execute(stmt)
+                conn.commit()
+            ic = conn.execute("PRAGMA integrity_check").fetchall()
+            fk = conn.execute("PRAGMA foreign_key_check").fetchall()
+        finally:
+            conn.close()
+    finally:
+        dest.unlink(missing_ok=True)
+    bad = [str(r) for r in ic if str(r[0]).lower() != "ok"]
+    if fk:
+        notes.append("fk " + str(len(fk)))
+        bad.append("foreign_key_check %s" % len(fk))
+    if bad:
+        return "APPLY_FAILED", bad, 1
+    return "ALL_PASS", ["integrity_check ok"], 0
+
+
 def file_digest(path):
     if path is None:
         return None
@@ -397,6 +431,8 @@ def parse_argv(argv: list[str] | None) -> tuple[bool, argparse.Namespace]:
     check_mode = False
     query_mode = False
     drift_mode = False
+    integrity_mode = False
+    pack_mode = False
     if raw and raw[0] == "check":
         check_mode = True
         raw = raw[1:]
@@ -405,6 +441,12 @@ def parse_argv(argv: list[str] | None) -> tuple[bool, argparse.Namespace]:
         raw = raw[1:]
     elif raw and raw[0] == "drift":
         drift_mode = True
+        raw = raw[1:]
+    elif raw and raw[0] == "integrity":
+        integrity_mode = True
+        raw = raw[1:]
+    elif raw and raw[0] == "pack":
+        pack_mode = True
         raw = raw[1:]
     p = argparse.ArgumentParser(prog="migguard", description="Lint + sandbox dry-run SQL migrations")
     p.add_argument("--version", action="version", version="migguard " + TOOL_VERSION)
@@ -430,12 +472,56 @@ def parse_argv(argv: list[str] | None) -> tuple[bool, argparse.Namespace]:
     args = p.parse_args(raw)
     if args.apply:
         args.no_dry_run = True
-    return check_mode, query_mode, drift_mode, args
+    return check_mode, query_mode, drift_mode, integrity_mode, pack_mode, args
 
 
 def main(argv: list[str] | None = None) -> int:
-    check_mode, query_mode, drift_mode, args = parse_argv(argv)
+    check_mode, query_mode, drift_mode, integrity_mode, pack_mode, args = parse_argv(argv)
 
+
+
+    if integrity_mode or pack_mode:
+        if args.db is None:
+            print("needs --db", file=sys.stderr)
+            return 2
+        sql_text = None
+        pack_files = list(args.migrations)
+        if pack_files:
+            sql_text = load_sql(pack_files)
+        itok, notes, icode = integrity_on(args.db, sql_text)
+        print("migguard integrity")
+        for n in notes:
+            print(" ", n)
+        qcode = 0
+        if pack_mode and args.code_root:
+            conn = sqlite3.connect(args.db)
+            try:
+                qnames = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
+            finally:
+                conn.close()
+            qhits = scan_code_root(args.code_root, qnames)
+            print("migguard query hits", len(qhits))
+            if not qhits:
+                qcode = 1
+        dcode = 0
+        if pack_mode and args.other:
+            _tok, dcode = drift_report(args.db, args.other)
+        rec = {
+            "tool": "migguard",
+            "tool_version": TOOL_VERSION,
+            "db_sha256": file_digest(args.db),
+            "sql_sha256": file_digest(pack_files[0]) if pack_files else None,
+            "integrity": itok,
+            "query_code": qcode,
+            "drift_code": dcode,
+        }
+        write_receipt(Path("migguard.receipt.json"), rec)
+        print("receipt migguard.receipt.json")
+        if icode or qcode or dcode:
+            print("APPLY_FAILED")
+            return 1
+        print("ALL_PASS")
+        return 0
 
     if drift_mode:
         if args.db is None or args.other is None:
