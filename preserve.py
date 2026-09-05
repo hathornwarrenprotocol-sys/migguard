@@ -12,7 +12,7 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
-TOOL_VERSION = "0.3.0"
+TOOL_VERSION = "0.4.0"
 
 
 def qident(name: str) -> str:

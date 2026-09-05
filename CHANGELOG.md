@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+- check first-token; PRESERVED / ALL_PASS / APPLY_FAILED
+- query --db --code-root
+- check --table --key --from-col --to-col uses preserve.py
+- drift --db --other
+- scripts/pre-commit.sh
+- pip script entry migguard = migguard:main
+
+# Changelog
+
 ## 0.3.0
 - --version, --quiet
 - reject non-sql

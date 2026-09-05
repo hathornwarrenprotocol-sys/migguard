@@ -353,15 +353,48 @@ def format_report(
     return "\n".join(lines)
 
 
+
+def drift_report(a: Path, b: Path) -> tuple[str, int]:
+    def counts(path: Path) -> dict[str, int]:
+        conn = sqlite3.connect(path)
+        try:
+            return table_row_counts(conn)
+        finally:
+            conn.close()
+    ca, cb = counts(a), counts(b)
+    names = sorted(set(ca) | set(cb))
+    diffs = []
+    for n in names:
+        if n not in ca:
+            diffs.append(n + " only in other")
+        elif n not in cb:
+            diffs.append(n + " only in db")
+        elif ca[n] != cb[n]:
+            diffs.append("%s %s != %s" % (n, ca[n], cb[n]))
+    if diffs:
+        print("migguard drift")
+        for d in diffs:
+            print(" ", d)
+        print("APPLY_FAILED")
+        return "APPLY_FAILED", 1
+    print("migguard drift")
+    print("tables", len(ca))
+    print("ALL_PASS")
+    return "ALL_PASS", 0
+
 def parse_argv(argv: list[str] | None) -> tuple[bool, argparse.Namespace]:
     raw = list(sys.argv[1:] if argv is None else argv)
     check_mode = False
     query_mode = False
+    drift_mode = False
     if raw and raw[0] == "check":
         check_mode = True
         raw = raw[1:]
     elif raw and raw[0] == "query":
         query_mode = True
+        raw = raw[1:]
+    elif raw and raw[0] == "drift":
+        drift_mode = True
         raw = raw[1:]
     p = argparse.ArgumentParser(prog="migguard", description="Lint + sandbox dry-run SQL migrations")
     p.add_argument("--version", action="version", version="migguard " + TOOL_VERSION)
@@ -378,6 +411,7 @@ def parse_argv(argv: list[str] | None) -> tuple[bool, argparse.Namespace]:
     p.add_argument("--apply", action="store_true", help="Alias of --no-dry-run (check subcommand)")
     p.add_argument("--quiet", action="store_true")
     p.add_argument("--code-root", type=Path, default=None, help="Scan code for dropped names")
+    p.add_argument("--other", type=Path, default=None, help="drift: second sqlite file")
     p.add_argument("--table", default=None, help="preserve: table name")
     p.add_argument("--key", default="userId", help="preserve: key column")
     p.add_argument("--from-col", default=None, dest="from_col", help="preserve: source column")
@@ -386,13 +420,19 @@ def parse_argv(argv: list[str] | None) -> tuple[bool, argparse.Namespace]:
     args = p.parse_args(raw)
     if args.apply:
         args.no_dry_run = True
-    return check_mode, query_mode, args
+    return check_mode, query_mode, drift_mode, args
 
 
 def main(argv: list[str] | None = None) -> int:
-    check_mode, query_mode, args = parse_argv(argv)
+    check_mode, query_mode, drift_mode, args = parse_argv(argv)
 
 
+    if drift_mode:
+        if args.db is None or args.other is None:
+            print("drift needs --db and --other", file=sys.stderr)
+            return 2
+        _tok, code = drift_report(args.db, args.other)
+        return code
     if query_mode:
         if args.db is None or args.code_root is None:
             print("query needs --db and --code-root", file=sys.stderr)

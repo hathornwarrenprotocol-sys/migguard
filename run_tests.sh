@@ -9,4 +9,5 @@ python tests/test_db_frozen.py
 python tests/test_blast.py
 python tests/test_check.py
 python tests/test_query.py
+python tests/test_drift.py
 echo ALL_PASS
