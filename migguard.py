@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-TOOL_VERSION = "0.3.1"
+TOOL_VERSION = "0.4.0"
 
 import argparse
 import json
@@ -356,8 +356,12 @@ def format_report(
 def parse_argv(argv: list[str] | None) -> tuple[bool, argparse.Namespace]:
     raw = list(sys.argv[1:] if argv is None else argv)
     check_mode = False
+    query_mode = False
     if raw and raw[0] == "check":
         check_mode = True
+        raw = raw[1:]
+    elif raw and raw[0] == "query":
+        query_mode = True
         raw = raw[1:]
     p = argparse.ArgumentParser(prog="migguard", description="Lint + sandbox dry-run SQL migrations")
     p.add_argument("--version", action="version", version="migguard " + TOOL_VERSION)
@@ -374,14 +378,45 @@ def parse_argv(argv: list[str] | None) -> tuple[bool, argparse.Namespace]:
     p.add_argument("--apply", action="store_true", help="Alias of --no-dry-run (check subcommand)")
     p.add_argument("--quiet", action="store_true")
     p.add_argument("--code-root", type=Path, default=None, help="Scan code for dropped names")
+    p.add_argument("--table", default=None, help="preserve: table name")
+    p.add_argument("--key", default="userId", help="preserve: key column")
+    p.add_argument("--from-col", default=None, dest="from_col", help="preserve: source column")
+    p.add_argument("--to-col", default=None, dest="to_col", help="preserve: target column")
+
     args = p.parse_args(raw)
     if args.apply:
         args.no_dry_run = True
-    return check_mode, args
+    return check_mode, query_mode, args
 
 
 def main(argv: list[str] | None = None) -> int:
-    check_mode, args = parse_argv(argv)
+    check_mode, query_mode, args = parse_argv(argv)
+
+
+    if query_mode:
+        if args.db is None or args.code_root is None:
+            print("query needs --db and --code-root", file=sys.stderr)
+            return 2
+        conn = sqlite3.connect(args.db)
+        try:
+            qnames = {
+                r[0]
+                for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                )
+            }
+        finally:
+            conn.close()
+        qhits = scan_code_root(args.code_root, qnames)
+        if not args.json:
+            print("migguard query")
+            print("tables:", ", ".join(sorted(qnames)))
+            for name, path in qhits:
+                print(f"  {name} -> {path}")
+            print("ALL_PASS" if qhits else "APPLY_FAILED")
+        else:
+            print(json.dumps({"tables": sorted(qnames), "code_hits": [{"name": n, "path": p} for n, p in qhits]}, indent=2))
+        return 0 if qhits else 1
 
     root = args.root.resolve()
     files = list(args.migrations)
@@ -458,6 +493,24 @@ def main(argv: list[str] | None = None) -> int:
             rc = 1 if score < args.fail_under else 0
 
     if check_mode:
+        if args.table and args.from_col and args.to_col:
+            if args.db is None or not files:
+                print("preserve check needs --db and a sql file", file=sys.stderr)
+                return 2
+            from preserve import apply_on_clone, column_map, classify
+            before = column_map(args.db, args.table, args.key, args.from_col)
+            clone, perr, partial = apply_on_clone(args.db, sql)
+            try:
+                after_new = column_map(clone, args.table, args.key, args.to_col)
+            finally:
+                clone.unlink(missing_ok=True)
+            pverdict = classify(before, after_new, perr, partial)
+            print("preserve", pverdict)
+            if pverdict == "PRESERVED":
+                print("PRESERVED")
+                return 0
+            print("APPLY_FAILED")
+            return 1
         if dry and dry.error:
             print("APPLY_FAILED")
             return 1

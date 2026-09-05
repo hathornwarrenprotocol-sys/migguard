@@ -10,7 +10,7 @@ def main():
     v = subprocess.run([sys.executable, str(ROOT / "migguard.py"), "--version"], capture_output=True, text=True)
     print("version", v.stdout.strip() or v.stderr.strip())
     assert v.returncode == 0
-    assert "0.3.1" in (v.stdout + v.stderr)
+    assert "0.4.0" in (v.stdout + v.stderr)
     q = subprocess.run(
         [
             sys.executable, str(ROOT / "migguard.py"),

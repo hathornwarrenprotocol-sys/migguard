@@ -1,6 +1,6 @@
 [project]
 name = "migguard"
-version = "0.3.1"
+version = "0.4.0"
 description = "SQLite migration lint, sandbox dry-run, and value-preservation check"
 requires-python = ">=3.10"
 readme = "README.md"

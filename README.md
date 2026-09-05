@@ -1,4 +1,4 @@
-# migguard 0.3.1
+# migguard 0.4.0
 
 SQLite migration lint, sandbox dry-run, and value-preservation check.
 Never writes the source database.
@@ -30,3 +30,5 @@ check is dry-run by default.
 2  missing files or not SQL
 
 SQLite only.
+
+    migguard query --db ./real/dev.db --code-root ./app_sample
