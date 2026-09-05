@@ -21,7 +21,12 @@ def main():
     assert a.returncode == 0 and last_line(a.stdout) == 'ALL_PASS'
     r = run(['check', str(ROOT / 'fixtures/sql/rename_column.sql'), '--db', str(ROOT / 'real/dev.db')])
     print('rename', r.returncode, last_line(r.stdout))
-    assert r.returncode == 0 and last_line(r.stdout) == 'PRESERVED'
+    assert r.returncode == 1 and last_line(r.stdout) == 'INCOMPLETE'
+    r2 = run(['check', str(ROOT / 'fixtures/sql/rename_column.sql'), '--db', str(ROOT / 'real/dev.db'),
+              '--table', 'User', '--key', 'id', '--from-col', 'name', '--to-col', 'fullName'])
+    print('rename-proved', r2.returncode, last_line(r2.stdout))
+    assert r2.returncode == 0 and last_line(r2.stdout) == 'PRESERVED'
+    assert 'db_sha256' in r.stdout
     d = run(['check', str(ROOT / 'fixtures/sql/drop_table.sql'), '--db', str(ROOT / 'real/dev.db'), '--code-root', str(ROOT / 'app_sample')])
     print('drop', d.returncode, last_line(d.stdout))
     assert d.returncode == 1 and last_line(d.stdout) == 'APPLY_FAILED'

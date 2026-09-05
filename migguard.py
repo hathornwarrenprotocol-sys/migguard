@@ -6,6 +6,7 @@ from __future__ import annotations
 TOOL_VERSION = "0.4.0"
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -382,6 +383,15 @@ def drift_report(a: Path, b: Path) -> tuple[str, int]:
     print("ALL_PASS")
     return "ALL_PASS", 0
 
+def file_digest(path):
+    if path is None:
+        return None
+    path = Path(path)
+    if not path.exists() or not path.is_file():
+        return None
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def parse_argv(argv: list[str] | None) -> tuple[bool, argparse.Namespace]:
     raw = list(sys.argv[1:] if argv is None else argv)
     check_mode = False
@@ -518,7 +528,9 @@ def main(argv: list[str] | None = None) -> int:
             "files": [str(f) for f in files],
             "findings": [asdict(f) for f in findings],
             "dry_run": asdict(dry) if dry else None,
-            "code_hits": [{"name": n, "path": p} for n, p in code_hits],
+            "code_hits": [{"name": n, "path": pth} for n, pth in code_hits],
+            "db_sha256": file_digest(args.db),
+            "sql_sha256": file_digest(files[0]) if files else None,
         }
         print(json.dumps(payload, indent=2))
         if args.max_row_loss is not None and dry and dry.rows_lost > args.max_row_loss:
@@ -533,6 +545,15 @@ def main(argv: list[str] | None = None) -> int:
             rc = 1 if score < args.fail_under else 0
 
     if check_mode:
+        print("db_sha256", file_digest(args.db) or "-")
+        print("sql_sha256", file_digest(files[0]) if files else "-")
+        dropped = set(dry.tables_dropped) if dry else set()
+        drop_hits = [(n, pth) for n, pth in code_hits if n in dropped]
+        if drop_hits:
+            for n, pth in drop_hits:
+                print("code still names dropped", n, pth)
+            print("APPLY_FAILED")
+            return 1
         if args.table and args.from_col and args.to_col:
             if args.db is None or not files:
                 print("preserve check needs --db and a sql file", file=sys.stderr)
@@ -551,12 +572,12 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             print("APPLY_FAILED")
             return 1
+        if any(f.kind == "RENAME" for f in findings):
+            print("INCOMPLETE")
+            return 1
         if dry and dry.error:
             print("APPLY_FAILED")
             return 1
-        if any(f.kind == "RENAME" for f in findings) and dry and dry.applied and not dry.error:
-            print("PRESERVED")
-            return 0
         if rc == 0:
             print("ALL_PASS")
             return 0
