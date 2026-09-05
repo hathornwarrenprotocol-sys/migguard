@@ -417,6 +417,17 @@ def integrity_on(path: Path, sql: str | None = None) -> tuple[str, list[str], in
     return "ALL_PASS", ["integrity_check ok"], 0
 
 
+def schema_digest(path):
+    if path is None:
+        return None
+    path = Path(path)
+    if not path.exists():
+        return None
+    from preserve import schema_fingerprint
+    import hashlib as _hl
+    return _hl.sha256(schema_fingerprint(path).encode()).hexdigest()
+
+
 def file_digest(path):
     if path is None:
         return None
@@ -510,6 +521,7 @@ def main(argv: list[str] | None = None) -> int:
             "tool": "migguard",
             "tool_version": TOOL_VERSION,
             "db_sha256": file_digest(args.db),
+            "schema_sha256": schema_digest(args.db),
             "sql_sha256": file_digest(pack_files[0]) if pack_files else None,
             "integrity": itok,
             "query_code": qcode,
@@ -616,6 +628,7 @@ def main(argv: list[str] | None = None) -> int:
             "dry_run": asdict(dry) if dry else None,
             "code_hits": [{"name": n, "path": pth} for n, pth in code_hits],
             "db_sha256": file_digest(args.db),
+            "schema_sha256": schema_digest(args.db),
             "sql_sha256": file_digest(files[0]) if files else None,
         }
         print(json.dumps(payload, indent=2))
@@ -632,6 +645,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if check_mode:
         print("db_sha256", file_digest(args.db) or "-")
+        print("schema_sha256", schema_digest(args.db) or "-")
         print("sql_sha256", file_digest(files[0]) if files else "-")
         dropped = set(dry.tables_dropped) if dry else set()
         drop_hits = [(n, pth) for n, pth in code_hits if n in dropped]

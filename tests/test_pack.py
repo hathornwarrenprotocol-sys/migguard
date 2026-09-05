@@ -15,6 +15,7 @@ def main():
     rec = json.loads((ROOT / 'migguard.receipt.json').read_text())
     assert rec['integrity'] == 'ALL_PASS'
     assert rec['db_sha256']
+    assert rec.get('schema_sha256')
     print('PASS pack')
 
 if __name__ == '__main__':
