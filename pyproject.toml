@@ -1,6 +1,16 @@
 [project]
 name = "migguard"
-version = "0.3.0"
+version = "0.3.1"
 description = "SQLite migration lint, sandbox dry-run, and value-preservation check"
 requires-python = ">=3.10"
 readme = "README.md"
+
+[project.scripts]
+migguard = "migguard:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["migguard", "preserve"]

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-TOOL_VERSION = "0.3.0"
+TOOL_VERSION = "0.3.1"
 
 import argparse
 import json
