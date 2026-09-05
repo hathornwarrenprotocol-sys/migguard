@@ -37,6 +37,8 @@ MIG_GLOBS = (
     "sql/migrations/*.sql",
 )
 
+CODE_EXTS = {".py", ".ts", ".tsx", ".js", ".jsx", ".prisma"}
+
 
 def strip_comments(sql: str) -> str:
     sql = re.sub(r"--.*?$", "", sql, flags=re.MULTILINE)
@@ -100,6 +102,39 @@ def lint_sql(sql: str) -> list[Finding]:
                 )
             )
     return findings
+
+
+def sql_names(sql: str) -> set[str]:
+    names: set[str] = set()
+    for stmt in split_statements(sql):
+        for pat in (
+            r'\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?["`[]?(\w+)',
+            r'\bDROP\s+COLUMN\s+["`[]?(\w+)',
+            r'\bRENAME\s+(?:COLUMN\s+)?["`[]?(\w+)',
+            r'\bTO\s+["`[]?(\w+)',
+            r'\bFROM\s+["`[]?(\w+)',
+            r'\bTABLE\s+["`[]?(\w+)',
+        ):
+            for m in re.finditer(pat, stmt, flags=re.I):
+                names.add(m.group(1))
+    return names
+
+
+def scan_code_root(code_root: Path, names: set[str]) -> list[tuple[str, str]]:
+    hits: list[tuple[str, str]] = []
+    if not code_root.exists() or not names:
+        return hits
+    for path in sorted(code_root.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in CODE_EXTS:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for name in sorted(names):
+            if re.search(rf"\b{re.escape(name)}\b", text):
+                hits.append((name, str(path)))
+    return hits
 
 
 def table_row_counts(conn: sqlite3.Connection) -> dict[str, int]:
@@ -231,7 +266,6 @@ def changed_since(root: Path, ref: str) -> list[Path]:
     except FileNotFoundError as exc:
         raise SystemExit(f"git not found ({exc})") from exc
     if proc.returncode != 0:
-        # unborn HEAD or missing ref: fall back to working tree vs ref, then vs HEAD
         proc = subprocess.run(
             ["git", "-C", str(root), "diff", "--name-only", "--diff-filter=ACMR", ref],
             check=False,
@@ -247,7 +281,6 @@ def changed_since(root: Path, ref: str) -> list[Path]:
         if not line:
             continue
         p = (root / line).resolve() if not Path(line).is_absolute() else Path(line)
-        # also accept paths relative to repo root when --root is a subdir
         if not p.exists():
             repo = subprocess.run(
                 ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
@@ -266,7 +299,13 @@ def load_sql(paths: Iterable[Path]) -> str:
     return "\n;\n".join(f"-- file: {p}\n{p.read_text(encoding='utf-8')}" for p in paths)
 
 
-def format_report(files: list[Path], findings: list[Finding], dry: DryRunResult | None, score: int) -> str:
+def format_report(
+    files: list[Path],
+    findings: list[Finding],
+    dry: DryRunResult | None,
+    score: int,
+    code_hits: list[tuple[str, str]] | None = None,
+) -> str:
     lines = [
         "migguard — migration safety report",
         "=" * 40,
@@ -304,12 +343,22 @@ def format_report(files: list[Path], findings: list[Finding], dry: DryRunResult 
             elif isinstance(a, int) and a < b:
                 mark = "↓ "
             lines.append(f"    {mark}{t}: {b} → {a}")
+    if code_hits:
+        lines.append("")
+        lines.append("code-root references:")
+        for name, path in code_hits:
+            lines.append(f"  {name} → {path}")
     lines.append("")
     lines.append("source database was never modified.")
     return "\n".join(lines)
 
 
-def main(argv: list[str] | None = None) -> int:
+def parse_argv(argv: list[str] | None) -> tuple[bool, argparse.Namespace]:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    check_mode = False
+    if raw and raw[0] == "check":
+        check_mode = True
+        raw = raw[1:]
     p = argparse.ArgumentParser(prog="migguard", description="Lint + sandbox dry-run SQL migrations")
     p.add_argument("--version", action="version", version="migguard " + TOOL_VERSION)
     p.add_argument("migrations", nargs="*", type=Path, help="SQL files (optional if --discover / --changed-since)")
@@ -322,8 +371,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--fail-under", type=int, default=60)
     p.add_argument("--max-row-loss", type=int, default=None)
     p.add_argument("--no-dry-run", action="store_true")
+    p.add_argument("--apply", action="store_true", help="Alias of --no-dry-run (check subcommand)")
     p.add_argument("--quiet", action="store_true")
-    args = p.parse_args(argv)
+    p.add_argument("--code-root", type=Path, default=None, help="Scan code for dropped names")
+    args = p.parse_args(raw)
+    if args.apply:
+        args.no_dry_run = True
+    return check_mode, args
+
+
+def main(argv: list[str] | None = None) -> int:
+    check_mode, args = parse_argv(argv)
 
     root = args.root.resolve()
     files = list(args.migrations)
@@ -359,11 +417,6 @@ def main(argv: list[str] | None = None) -> int:
         print(msg, file=sys.stderr)
         return 2
 
-    not_sql = [str(m) for m in files if m.suffix.lower() != ".sql"]
-    if not_sql:
-        print("not sql: " + ", ".join(not_sql), file=sys.stderr)
-        return 2
-
     sql = load_sql(files)
     findings = lint_sql(sql)
     dry = None
@@ -372,31 +425,51 @@ def main(argv: list[str] | None = None) -> int:
         dry = dry_run(args.db, sql, seed)
     score = safety_score(findings, dry)
 
+    names = sql_names(sql)
+    if dry:
+        names |= set(dry.tables_dropped) | set(dry.tables_added)
+    code_hits = scan_code_root(args.code_root, names) if args.code_root else []
+
     if args.quiet and not args.json:
         print(f"{score} {verdict(score)}")
         if args.max_row_loss is not None and dry and dry.rows_lost > args.max_row_loss:
-            return 1
-        return 1 if score < args.fail_under else 0
-
-    if args.json:
-        print(
-            json.dumps(
-                {
-                    "score": score,
-                    "verdict": verdict(score),
-                    "files": [str(f) for f in files],
-                    "findings": [asdict(f) for f in findings],
-                    "dry_run": asdict(dry) if dry else None,
-                },
-                indent=2,
-            )
-        )
+            rc = 1
+        else:
+            rc = 1 if score < args.fail_under else 0
+    elif args.json:
+        payload = {
+            "score": score,
+            "verdict": verdict(score),
+            "files": [str(f) for f in files],
+            "findings": [asdict(f) for f in findings],
+            "dry_run": asdict(dry) if dry else None,
+            "code_hits": [{"name": n, "path": p} for n, p in code_hits],
+        }
+        print(json.dumps(payload, indent=2))
+        if args.max_row_loss is not None and dry and dry.rows_lost > args.max_row_loss:
+            rc = 1
+        else:
+            rc = 1 if score < args.fail_under else 0
     else:
-        print(format_report(files, findings, dry, score))
+        print(format_report(files, findings, dry, score, code_hits))
+        if args.max_row_loss is not None and dry and dry.rows_lost > args.max_row_loss:
+            rc = 1
+        else:
+            rc = 1 if score < args.fail_under else 0
 
-    if args.max_row_loss is not None and dry and dry.rows_lost > args.max_row_loss:
+    if check_mode:
+        if dry and dry.error:
+            print("APPLY_FAILED")
+            return 1
+        if any(f.kind == "RENAME" for f in findings) and dry and dry.applied and not dry.error:
+            print("PRESERVED")
+            return 0
+        if rc == 0:
+            print("ALL_PASS")
+            return 0
+        print("APPLY_FAILED")
         return 1
-    return 1 if score < args.fail_under else 0
+    return rc
 
 
 if __name__ == "__main__":

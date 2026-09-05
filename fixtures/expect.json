@@ -40,5 +40,11 @@
     "exit": 0,
     "max_row_loss": 0,
     "fail_under": 60
+  },
+  {
+    "file": "add_not_null_default.sql",
+    "exit": 0,
+    "max_row_loss": 0,
+    "fail_under": 60
   }
 ]

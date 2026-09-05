@@ -1,9 +1,11 @@
-# migguard 0.2.2
+# migguard 0.3.0
 
 SQLite migration lint, sandbox dry-run, and value-preservation check.
 Never writes the source database.
 
 ## Commands
+
+python migguard.py check --db ./real/dev.db --code-root ./app_sample
 
 python migguard.py path.sql --db ./real/dev.db --max-row-loss 0 --fail-under 60
 python migguard.py path.sql --db ./real/dev.db --json
