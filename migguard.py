@@ -392,7 +392,7 @@ def integrity_on(path: Path, sql: str | None = None) -> tuple[str, list[str], in
     tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     tmp.close()
     dest = Path(tmp.name)
-    shutil.copy2(path, dest)
+    src_conn = sqlite3.connect(str(path)); dest_conn = sqlite3.connect(str(dest)); src_conn.backup(dest_conn); dest_conn.close(); src_conn.close()
     notes = []
     try:
         conn = sqlite3.connect(dest)

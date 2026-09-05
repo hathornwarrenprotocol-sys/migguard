@@ -65,7 +65,13 @@ def apply_on_clone(src: Path, sql: str) -> tuple[Path, str | None, bool]:
     tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     tmp.close()
     dest = Path(tmp.name)
-    shutil.copy2(src, dest)
+    src_conn = sqlite3.connect(str(src))
+    dest_conn = sqlite3.connect(str(dest))
+    try:
+        src_conn.backup(dest_conn)
+    finally:
+        dest_conn.close()
+        src_conn.close()
     before = schema_fingerprint(dest)
 
     conn = sqlite3.connect(dest)
