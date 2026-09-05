@@ -1,4 +1,85 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>migguard</title><body style="font-family:system-ui,sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem;line-height:1.45"><h1>migguard</h1><p>SQLite migration check. Lint, sandbox dry-run, value preserve, code scan. Never writes the source database.</p><p><a href="https://github.com/hathornwarrenprotocol-sys/migguard">github.com/hathornwarrenprotocol-sys/migguard</a></p><pre>git clone https://github.com/hathornwarrenprotocol-sys/migguard.git
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>migguard — check the migration. leave the database alone.</title>
+<meta name="description" content="SQLite migration check. Clone, lint, dry-run, prove values. Never writes the source file.">
+<style>
+  :root {
+    --bg: #0B0C0E;
+    --surface: #14161A;
+    --line: #2A2E36;
+    --text: #EDEAE3;
+    --mute: #8B9088;
+    --pass: #7CFFB2;
+    --fail: #FF6B4A;
+    --warn: #F5C15A;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 ui-sans-serif, system-ui, sans-serif;
+  }
+  main { max-width: 40rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+  .top { display: flex; justify-content: space-between; align-items: baseline; }
+  .word { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .04em; }
+  .ver { color: var(--mute); font-size: .85rem; }
+  h1 { font-size: clamp(1.8rem, 5vw, 2.4rem); line-height: 1.15; font-weight: 600; margin: 2rem 0 .75rem; }
+  p.lead { color: var(--mute); margin: 0 0 1.5rem; }
+  .tokens { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.25rem 0 2rem; }
+  .tok {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .8rem;
+    padding: .35rem .6rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  .ok { color: var(--pass); }
+  .bad { color: var(--fail); }
+  .mid { color: var(--warn); }
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    font-size: .82rem;
+    line-height: 1.45;
+  }
+  a { color: var(--text); }
+  h2 { font-size: 1rem; margin: 2rem 0 .5rem; font-weight: 600; }
+  footer { margin-top: 3rem; color: var(--mute); font-size: .85rem; }
+</style>
+<main>
+  <div class="top">
+    <span class="word">migguard</span>
+    <span class="ver">0.4.0 · MIT</span>
+  </div>
+  <h1>Check the migration.<br>Leave the database alone.</h1>
+  <p class="lead">Lint the SQL. Dry-run on a clone. Prove values moved. Hash the source file. One last line is the product.</p>
+  <div class="tokens">
+    <span class="tok ok">ALL_PASS</span>
+    <span class="tok ok">PRESERVED</span>
+    <span class="tok mid">INCOMPLETE</span>
+    <span class="tok bad">APPLY_FAILED</span>
+  </div>
+  <h2>Install</h2>
+<pre>git clone https://github.com/hathornwarrenprotocol-sys/migguard.git
 cd migguard
-python3 -m pip install -e .
-migguard check file.sql --db ./app.db</pre><p>ALL_PASS · PRESERVED · APPLY_FAILED</p></body></html>
+python3 migguard.py --version</pre>
+  <h2>Commands</h2>
+<pre>python3 migguard.py check file.sql --db ./app.db
+python3 migguard.py check file.sql --db ./app.db \
+  --table User --key id --from-col name --to-col fullName
+python3 migguard.py query --db ./app.db --code-root ./app
+python3 migguard.py pack --db ./app.db --code-root ./app
+python3 migguard.py drift --db ./a.db --other ./b.db</pre>
+  <h2>Agent law</h2>
+  <p class="lead">If the last line is not ALL_PASS or PRESERVED, do not apply. Never write the source file. If db_sha256 does not match the file you were given, stop.</p>
+  <p><a href="https://github.com/hathornwarrenprotocol-sys/migguard">github.com/hathornwarrenprotocol-sys/migguard</a></p>
+  <footer>Source file stays bit-identical. That is the contract.</footer>
+</main>
+</html>
