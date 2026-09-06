@@ -32,3 +32,5 @@ check is dry-run by default.
 SQLite only.
 
     migguard query --db ./real/dev.db --code-root ./app_sample
+
+More: https://hathornwarren.com
