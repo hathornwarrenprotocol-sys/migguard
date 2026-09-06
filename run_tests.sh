@@ -11,4 +11,5 @@ python tests/test_check.py
 python tests/test_query.py
 python tests/test_drift.py
 python tests/test_pack.py
+python tests/test_mcp.py
 echo ALL_PASS
